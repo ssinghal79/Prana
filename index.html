@@ -390,7 +390,12 @@ h1, h2, h3, h4 {
 }
 .breath-info {
   position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
   text-align: center;
+  pointer-events: none;
 }
 .phase-label {
   font-family: var(--font-display);
@@ -1191,7 +1196,8 @@ const Audio = {
     if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
   },
   playTone(freq, duration = 0.3, type = 'sine', vol = 0.12) {
-    if (!this.enabled || !this.ctx) return;
+    if (!this.enabled) return;
+    if (!this.ctx) this.init();
     this.resume();
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
@@ -1205,7 +1211,8 @@ const Audio = {
     osc.stop(this.ctx.currentTime + duration);
   },
   playBowl(freq = 440) {
-    if (!this.enabled || !this.ctx) return;
+    if (!this.enabled) return;
+    if (!this.ctx) this.init();
     this.resume();
     const t = this.ctx.currentTime;
     const dur = 1.8;
@@ -1230,7 +1237,8 @@ const Audio = {
   tick() { this.playTone(800, 0.06, 'sine', 0.08); },
   countdownBeep(n) { this.playTone(n === 0 ? 660 : 440, 0.15, 'sine', 0.1); },
   complete() {
-    if (!this.enabled || !this.ctx) return;
+    if (!this.enabled) return;
+    if (!this.ctx) this.init();
     this.resume();
     const t = this.ctx.currentTime;
     [523, 659, 784].forEach((f, i) => {
