@@ -296,6 +296,12 @@ h1, h2, h3, h4 {
   font-weight: 600;
   font-size: 15px;
 }
+.config-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  font-style: italic;
+}
 .config-radio-group { display: flex; gap: 8px; }
 .config-radio {
   flex: 1;
@@ -1050,7 +1056,7 @@ const TECHNIQUES = {
     description: 'Power breathing rounds followed by timed retention. Builds energy and cold resilience.',
     tags: ['Energy', 'Endurance', 'Retention'],
     accent: '#E8A74E',
-    defaults: { breathCount: 30, recoveryHold: 15, rounds: 3 },
+    defaults: { breathCount: 30, breathInhale: 2, breathExhale: 1.5, recoveryHold: 15, rounds: 3 },
   },
   four78: {
     id: 'four78',
@@ -1189,6 +1195,7 @@ const Store = {
 const Audio = {
   ctx: null,
   enabled: true,
+  _primed: false,
   init() {
     if (this.ctx) return;
     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1196,10 +1203,22 @@ const Audio = {
   resume() {
     if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
   },
+  // Called on first user gesture to guarantee iOS unlocks AudioContext
+  prime() {
+    if (this._primed) return;
+    this._primed = true;
+    this.init();
+    this.resume();
+    // Play a silent buffer to fully unlock on iOS
+    const buf = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(this.ctx.destination);
+    src.start();
+  },
   playTone(freq, duration = 0.3, type = 'sine', vol = 0.12) {
     if (!this.enabled) return;
-    if (!this.ctx) this.init();
-    this.resume();
+    this.prime(); // ensure context is created and unlocked
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = type;
@@ -1213,8 +1232,7 @@ const Audio = {
   },
   playBowl(freq = 440) {
     if (!this.enabled) return;
-    if (!this.ctx) this.init();
-    this.resume();
+    this.prime();
     const t = this.ctx.currentTime;
     const dur = 1.8;
     [1, 2.76, 5.4].forEach((harmonic, i) => {
@@ -1239,8 +1257,7 @@ const Audio = {
   countdownBeep(n) { this.playTone(n === 0 ? 660 : 440, 0.15, 'sine', 0.1); },
   complete() {
     if (!this.enabled) return;
-    if (!this.ctx) this.init();
-    this.resume();
+    this.prime();
     const t = this.ctx.currentTime;
     [523, 659, 784].forEach((f, i) => {
       const osc = this.ctx.createOscillator();
@@ -1317,7 +1334,7 @@ function renderHome() {
 
 // ===================== CONFIG MODAL =====================
 function openConfig(techId) {
-  Audio.init();
+  Audio.prime();
   selectedTechnique = techId;
   const tech = TECHNIQUES[techId];
   const cfg = { ...tech.defaults };
@@ -1335,6 +1352,23 @@ function openConfig(techId) {
           <input type="range" min="20" max="40" value="${cfg.breathCount}" id="cfgBreathCount">
           <span class="config-value" id="cfgBreathCountVal">${cfg.breathCount}</span>
         </div>
+        <div class="config-hint">Recommended: 30 breaths</div>
+      </div>
+      <div class="config-group">
+        <label>Inhale duration (seconds)</label>
+        <div class="config-row">
+          <input type="range" min="1" max="4" step="0.5" value="${cfg.breathInhale}" id="cfgBreathInhale">
+          <span class="config-value" id="cfgBreathInhaleVal">${cfg.breathInhale}s</span>
+        </div>
+        <div class="config-hint">Recommended: 2s (fast/energising), 3s (slow/controlled)</div>
+      </div>
+      <div class="config-group">
+        <label>Exhale duration (seconds)</label>
+        <div class="config-row">
+          <input type="range" min="1" max="4" step="0.5" value="${cfg.breathExhale}" id="cfgBreathExhale">
+          <span class="config-value" id="cfgBreathExhaleVal">${cfg.breathExhale}s</span>
+        </div>
+        <div class="config-hint">Recommended: 1.5s (fast/energising), 2.5s (slow/controlled)</div>
       </div>
       <div class="config-group">
         <label>Recovery hold (seconds)</label>
@@ -1342,6 +1376,7 @@ function openConfig(techId) {
           <input type="range" min="10" max="30" value="${cfg.recoveryHold}" id="cfgRecoveryHold">
           <span class="config-value" id="cfgRecoveryHoldVal">${cfg.recoveryHold}s</span>
         </div>
+        <div class="config-hint">Recommended: 15s</div>
       </div>
       <div class="config-group">
         <label>Rounds</label>
@@ -1349,9 +1384,12 @@ function openConfig(techId) {
           <input type="range" min="1" max="5" value="${cfg.rounds}" id="cfgRounds">
           <span class="config-value" id="cfgRoundsVal">${cfg.rounds}</span>
         </div>
+        <div class="config-hint">Recommended: 3 rounds</div>
       </div>
     `;
     $('#cfgBreathCount').oninput = e => { cfg.breathCount = +e.target.value; $('#cfgBreathCountVal').textContent = cfg.breathCount; };
+    $('#cfgBreathInhale').oninput = e => { cfg.breathInhale = +e.target.value; $('#cfgBreathInhaleVal').textContent = cfg.breathInhale + 's'; };
+    $('#cfgBreathExhale').oninput = e => { cfg.breathExhale = +e.target.value; $('#cfgBreathExhaleVal').textContent = cfg.breathExhale + 's'; };
     $('#cfgRecoveryHold').oninput = e => { cfg.recoveryHold = +e.target.value; $('#cfgRecoveryHoldVal').textContent = cfg.recoveryHold + 's'; };
     $('#cfgRounds').oninput = e => { cfg.rounds = +e.target.value; $('#cfgRoundsVal').textContent = cfg.rounds; };
   } else {
@@ -1361,47 +1399,47 @@ function openConfig(techId) {
         <div class="config-group"><label>Inhale (seconds)</label><div class="config-row">
           <input type="range" min="2" max="10" value="${cfg.inhale}" id="cfgInhale">
           <span class="config-value" id="cfgInhaleVal">${cfg.inhale}s</span>
-        </div></div>
+        </div><div class="config-hint">Recommended: 4s</div></div>
         <div class="config-group"><label>Hold (seconds)</label><div class="config-row">
           <input type="range" min="2" max="10" value="${cfg.hold1}" id="cfgHold1">
           <span class="config-value" id="cfgHold1Val">${cfg.hold1}s</span>
-        </div></div>
+        </div><div class="config-hint">Recommended: 4s</div></div>
         <div class="config-group"><label>Exhale (seconds)</label><div class="config-row">
           <input type="range" min="2" max="10" value="${cfg.exhale}" id="cfgExhale">
           <span class="config-value" id="cfgExhaleVal">${cfg.exhale}s</span>
-        </div></div>
+        </div><div class="config-hint">Recommended: 4s</div></div>
         <div class="config-group"><label>Hold (seconds)</label><div class="config-row">
           <input type="range" min="2" max="10" value="${cfg.hold2}" id="cfgHold2">
           <span class="config-value" id="cfgHold2Val">${cfg.hold2}s</span>
-        </div></div>`;
+        </div><div class="config-hint">Recommended: 4s (equal sides = the "box")</div></div>`;
     } else if (techId === 'four78') {
       phaseHTML = `
         <div class="config-group"><label>Inhale (seconds)</label><div class="config-row">
           <input type="range" min="2" max="8" value="${cfg.inhale}" id="cfgInhale">
           <span class="config-value" id="cfgInhaleVal">${cfg.inhale}s</span>
-        </div></div>
+        </div><div class="config-hint">Recommended: 4s</div></div>
         <div class="config-group"><label>Hold (seconds)</label><div class="config-row">
           <input type="range" min="3" max="12" value="${cfg.hold}" id="cfgHold">
           <span class="config-value" id="cfgHoldVal">${cfg.hold}s</span>
-        </div></div>
+        </div><div class="config-hint">Recommended: 7s</div></div>
         <div class="config-group"><label>Exhale (seconds)</label><div class="config-row">
           <input type="range" min="4" max="14" value="${cfg.exhale}" id="cfgExhale">
           <span class="config-value" id="cfgExhaleVal">${cfg.exhale}s</span>
-        </div></div>`;
+        </div><div class="config-hint">Recommended: 8s (the 4:7:8 ratio matters most)</div></div>`;
     } else if (techId === 'sigh') {
       phaseHTML = `
         <div class="config-group"><label>First inhale (seconds)</label><div class="config-row">
           <input type="range" min="1" max="4" value="${cfg.inhale1}" id="cfgInhale1">
           <span class="config-value" id="cfgInhale1Val">${cfg.inhale1}s</span>
-        </div></div>
+        </div><div class="config-hint">Recommended: 2s</div></div>
         <div class="config-group"><label>Top-up sip (seconds)</label><div class="config-row">
           <input type="range" min="1" max="3" value="${cfg.inhale2}" id="cfgInhale2">
           <span class="config-value" id="cfgInhale2Val">${cfg.inhale2}s</span>
-        </div></div>
+        </div><div class="config-hint">Recommended: 1s (short, sharp second inhale)</div></div>
         <div class="config-group"><label>Exhale (seconds)</label><div class="config-row">
           <input type="range" min="4" max="10" value="${cfg.exhale}" id="cfgExhale">
           <span class="config-value" id="cfgExhaleVal">${cfg.exhale}s</span>
-        </div></div>`;
+        </div><div class="config-hint">Recommended: 6s (long slow exhale is the key)</div></div>`;
     }
 
     const modeHTML = `
@@ -1470,8 +1508,7 @@ function closeConfig() {
 
 // ===================== SESSION ENGINE =====================
 async function startSession(techId, config) {
-  Audio.init();
-  Audio.resume();
+  Audio.prime();
   await requestWakeLock();
 
   const tech = TECHNIQUES[techId];
@@ -1624,20 +1661,23 @@ async function runWimHof(config, sessionData, isPaused, isStopped, waitUnpaused)
       await waitUnpaused();
       whBreathCount.textContent = b;
 
+      const inhaleMs = config.breathInhale * 1000;
+      const exhaleMs = config.breathExhale * 1000;
+
       phaseLabel.textContent = 'Breathe In';
-      document.documentElement.style.setProperty('--breath-duration', '1.8s');
+      document.documentElement.style.setProperty('--breath-duration', (inhaleMs * 0.9 / 1000) + 's');
       document.documentElement.style.setProperty('--breath-scale', '1.0');
       Audio.tick();
       phaseTimer.textContent = '';
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise(r => setTimeout(r, inhaleMs));
 
       if (isStopped()) break;
 
       phaseLabel.textContent = 'Breathe Out';
-      document.documentElement.style.setProperty('--breath-duration', '1.3s');
+      document.documentElement.style.setProperty('--breath-duration', (exhaleMs * 0.85 / 1000) + 's');
       document.documentElement.style.setProperty('--breath-scale', '0.35');
       Audio.playTone(600, 0.06, 'sine', 0.06);
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise(r => setTimeout(r, exhaleMs));
     }
     if (isStopped()) break;
 
@@ -1975,6 +2015,18 @@ async function init() {
     showProfilePicker();
   }
 }
+
+// Prime audio on very first user gesture (iOS requirement)
+['click', 'touchstart'].forEach(evt => {
+  document.addEventListener(evt, () => Audio.prime(), { once: true, passive: true });
+});
+
+// Re-unlock AudioContext when returning from background/lock screen (iOS suspends it)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && Audio.ctx && Audio.ctx.state === 'suspended') {
+    Audio.ctx.resume();
+  }
+});
 
 init();
 </script>
